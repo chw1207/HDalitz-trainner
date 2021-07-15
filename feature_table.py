@@ -3,6 +3,7 @@ import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 # from argparse import ArgumentParser
 
 def plottable(df):
@@ -26,9 +27,11 @@ def plottable(df):
     Table.set_fontsize(10)
     Table.scale(1, 1.4)
     # plt.subplots_adjust(left = 0.22)
+    outdir = "./plots/FeatureTable"
+    os.makedirs(outdir, exist_ok = True) # mkdir the ouput directory of the plots
     outName = importConfig.replace("Tools.TrainConfig_", "")
-    plt.savefig('./plots/FeatureTable/Feature_table_{}.pdf'.format(outName), bbox_inches = 'tight')
-    print('Save table as ./plots/FeatureTable/Feature_table_{}.pdf'.format(outName))
+    plt.savefig('{}/Feature_table_{}.pdf'.format(outdir, outName), bbox_inches = 'tight')
+    print('Save table as {}/Feature_table_{}.pdf'.format(outdir, outName))
 
 
 def main():
@@ -67,7 +70,7 @@ def main():
     # }
 
     description = {
-        "rho":              "rhoHandle.product",
+        "rho":              "The average energy density in the event",
         "eleEn":            "energy",
         "eleEta":           "eta",
         "eleSCEn":          "superCluster.energy",
