@@ -5,7 +5,7 @@
 This trainner is used to train the following models in the $$H \rightarrow \gamma\gamma^* \rightarrow ee\gamma$$ analysis.
 - **Resolved-Merged electrons classifier:** To differentiate the resolved and merged electrons.
 - **Merged ID:** To discriminate merged $$\gamma^*$$ and the associated background.
-
+<img src="https://render.githubusercontent.com/render/math?math=e^{i \pi} = -1">
 ---
 ### Prepare training samples 
 - PrepareData_ResolvedMergedClassifier.py
