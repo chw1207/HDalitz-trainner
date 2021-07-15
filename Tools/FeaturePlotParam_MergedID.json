@@ -1,0 +1,92 @@
+{
+    "eleEn": {
+        "bininfo": [50,0,200],
+        "xAxisLabel": "E (GeV)",
+        "yAxisUnit": "GeV",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 5
+    },
+    "eleD0": {
+        "bininfo": [60,0,3],
+        "xAxisLabel": "d_{0} (cm)",
+        "yAxisUnit": "cm",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 1.2
+    },
+    "eleDz": {
+        "bininfo": [50,0,5],
+        "xAxisLabel": "d_{z} (cm)",
+        "yAxisUnit": "cm",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 1.2
+    },
+    "eleSIP": {
+        "bininfo": [50,0,10],
+        "xAxisLabel": "Significance of IP",
+        "yAxisUnit": "",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 5
+    },
+    "elePtError": {
+        "bininfo": [50,0,20],
+        "xAxisLabel": "p_{T} error (GeV)",
+        "yAxisUnit": "GeV",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 2
+    },
+    "eleIDMVAIso": {
+        "bininfo": [50,-1,1],
+        "xAxisLabel": "MVA score",
+        "yAxisUnit": "",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 2
+    },
+    "gsfPtSum": {
+        "bininfo": [50,0,200],
+        "xAxisLabel": "Sum of p_{T}^{Gsf} (GeV)",
+        "yAxisUnit": "GeV",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 2
+    },
+    "gsfPtRatio": {
+        "bininfo": [50,0,1],
+        "xAxisLabel": "p_{T}^{Gsf2}/p_{T}^{Gsf1}",
+        "yAxisUnit": "",
+        "xoverflow": "false",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 2
+    },
+    "gsfDeltaR": {
+        "bininfo": [100,0,0.1],
+        "xAxisLabel": "#DeltaR(Gsf1, Gsf2)",
+        "yAxisUnit": "",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 2
+    },
+    "gsfMissHitsSum": {
+        "bininfo": [20,0,20],
+        "xAxisLabel": "N_{missing hits}^{Gsf1}+N_{missing hits}^{Gsf2}",
+        "yAxisUnit": "",
+        "xoverflow": "true",
+        "xunderflow": "false",
+        "logy": "true",
+        "y_axisscale": 2
+    }
+}
