@@ -2,10 +2,10 @@
 
 ### Original package: https://github.com/cms-egamma/ID-Trainer 
 
-This trainner is used to train the following models in the $$H \rightarrow \gamma\gamma^* \rightarrow ee\gamma$$ analysis.
+This trainner is used to train the following models in the <img src="https://render.githubusercontent.com/render/math?math=H\rightarrow\gamma\gamma^*\rightarrow ee\gamma"> analysis.
 - **Resolved-Merged electrons classifier:** To differentiate the resolved and merged electrons.
-- **Merged ID:** To discriminate merged $$\gamma^*$$ and the associated background.
-<img src="https://render.githubusercontent.com/render/math?math=H\rightarrow\gamma\gamma^*\rightarrow ee\gamma">
+- **Merged ID:** To discriminate merged <img src="https://render.githubusercontent.com/render/math?math=\gamma^*"> and the associated background.
+
 ---
 ### Prepare training samples 
 - PrepareData_ResolvedMergedClassifier.py
