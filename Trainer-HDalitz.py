@@ -258,334 +258,334 @@ with open('./Tools/{}'.format(Conf.featureplotparam_json), 'r') as fp:
             )
 
 
-# def PrepDataset(df_final, TrainIndices, TestIndices, features, cat, weight):
-#     X_train = df_final.loc[TrainIndices, features]
-#     Y_train = df_final.loc[TrainIndices, cat]
-#     Wt_train = df_final.loc[TrainIndices, weight]
+def PrepDataset(df_final, TrainIndices, TestIndices, features, cat, weight):
+    X_train = df_final.loc[TrainIndices, features]
+    Y_train = df_final.loc[TrainIndices, cat]
+    Wt_train = df_final.loc[TrainIndices, weight]
     
-#     X_test = df_final.loc[TestIndices, features]
-#     Y_test = df_final.loc[TestIndices, cat]
-#     Wt_test = df_final.loc[TestIndices, weight]
+    X_test = df_final.loc[TestIndices, features]
+    Y_test = df_final.loc[TestIndices, cat]
+    Wt_test = df_final.loc[TestIndices, weight]
 
-#     # X_train = xgb.DMatrix(X_train, feature_names=Conf.features[MVA])
-#     X_train = np.asarray(X_train)
-#     Y_train = np.asarray(Y_train)
-#     Wt_train = np.asarray(Wt_train)
+    # X_train = xgb.DMatrix(X_train, feature_names=Conf.features[MVA])
+    X_train = np.asarray(X_train)
+    Y_train = np.asarray(Y_train)
+    Wt_train = np.asarray(Wt_train)
     
-#     # X_train = xgb.DMatrix(X_train, feature_names=Conf.features[MVA])
-#     X_test = np.asarray(X_test)
-#     Y_test = np.asarray(Y_test)
-#     Wt_test = np.asarray(Wt_test)
-#     return X_train, Y_train, Wt_train, X_test, Y_test, Wt_test
+    # X_train = xgb.DMatrix(X_train, feature_names=Conf.features[MVA])
+    X_test = np.asarray(X_test)
+    Y_test = np.asarray(Y_test)
+    Wt_test = np.asarray(Wt_test)
+    return X_train, Y_train, Wt_train, X_test, Y_test, Wt_test
 
-# # Reference:
-# # [1] Use of GPU: https://www.kaggle.com/vinhnguyen/accelerating-hyper-parameter-searching-with-gpu
-# # [2] deterministic_histogram: https://xgboost.readthedocs.io/en/latest/parameter.html # additional-parameters-for-gpu-hist-tree-method
-# roc_XGB = []
+# Reference:
+# [1] Use of GPU: https://www.kaggle.com/vinhnguyen/accelerating-hyper-parameter-searching-with-gpu
+# [2] deterministic_histogram: https://xgboost.readthedocs.io/en/latest/parameter.html # additional-parameters-for-gpu-hist-tree-method
+roc_XGB = []
+for MVA in Conf.MVAs:
+    if 'XGB' in MVA:
+        ## ----- Prepare data to train the model -----##
+        print (color.BLUE + 'Using method: {}'.format(MVA) + color.END)
+        X_train, Y_train, Wt_train, X_test, Y_test, Wt_test = PrepDataset(df_final, TrainIndices, TestIndices, Conf.features[MVA], cat, weight)
+        
+        ## ----- Start to train the model -----##
+        print(color.GREEN + MVA + " Training starting" + color.END)
+        xgb_model = xgb.XGBClassifier(
+            objective = "binary:logistic", 
+            random_state = Conf.RandomState, 
+            use_label_encoder = False, 
+            scale_pos_weight = scaleposweight, 
+            tree_method = 'gpu_hist', 
+            # deterministic_histogram = False
+        )
+        print(color.GREEN + "Performing XGB grid search" + color.END)
+
+        if Conf.Multicore:
+            NCPUs = 12
+            print ('Using multicore, with NCPUs =', NCPUs)
+            cv = GridSearchCV(
+                xgb_model, 
+                Conf.XGBGridSearch[MVA],
+                scoring = 'neg_log_loss',
+                cv = 3,
+                verbose = 1,
+                n_jobs = NCPUs,
+            )
+        else:
+            print ('Using single core')
+            cv = GridSearchCV(
+                xgb_model,
+                Conf.XGBGridSearch[MVA],
+                scoring = 'neg_log_loss',
+                cv = 3,
+                verbose = 1
+            )
+        
+        search = cv.fit(X_train, Y_train, sample_weight = Wt_train, verbose = 1)
+
+        ##----- Save the training model -----##
+        pickle.dump(cv, open(Conf.OutputDirName + "/" + MVA + "/" + MVA + "_" + "modelXGB.pkl", "wb"))
+        ROOT.TMVA.Experimental.SaveXGBoost(search.best_estimator_, "myBDT", Conf.OutputDirName+'/'+Conf.xgbmodeloutname, num_inputs = len(Conf.features[MVA]))
+        
+        ##----- Print the training results -----##
+        print(color.BOLD + color.GREEN + '-------- Results for XGBClassifier --------' + color.END)
+        print(color.GREEN + "XGB Best Parameters:" + color.END)
+        print(color.GREEN + str(search.best_params_) + color.END)
+        print(color.GREEN + "Expected neg log loss of XGB model = " + str((np.round(np.average(search.best_score_),3))*100) + '%' + color.END)
+        pred = search.predict(X_test)
+        print(color.GREEN + "XGB Accuracy: " + str(round(accuracy_score(Y_test, pred, sample_weight = Wt_test) * 100., 2)) + "%" + color.END)
+        # print(color.GREEN + "XGB ROC AUC: " + str(round(roc_auc_score(Y_test, pred, sample_weight = Wt_test) * 100., 2)) + "%" + color.END)
+        # precision, recall, thresholds = precision_recall_curve(Y_test, pred, sample_weight = Wt_test)
+        # area = auc(recall, precision)
+    
+        ##----- Plot the training results (MVA && ROC)-----##
+        df_final.loc[TrainIndices,MVA+"_pred"] = cv.predict_proba(X_train)[:,1]
+        df_final.loc[TestIndices,MVA+"_pred"] = cv.predict_proba(X_test)[:,1]
+        
+        # MVA distribution
+        print(color.GREEN + "Plotting output response for XGB" + color.END)
+        fig, axes = plt.subplots(1, 1, figsize = (6, 6))
+        df_resolved = df_final[(df_final["TrainDataset"] == 1)]
+        plot_mva(
+            df_final[(df_final["TrainDataset"] == 1)],
+            MVA+"_pred", bins = np.linspace(0, 1, num = 40),
+            cat = cat,Wt = weight, ax = axes, sample = 'train', ls = 'dashed', alpha = 0.4,
+            logscale = Conf.MVAlogplot
+        )
+        plot_mva(
+            df_final[(df_final["TrainDataset"] == 0)],
+            MVA+"_pred", bins = np.linspace(0, 1, num = 40),
+            cat = cat, Wt = weight, ax = axes, sample = 'test',ls = 'solid', alpha = 0.6,
+            logscale = Conf.MVAlogplot
+        )
+        plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBMVA.pdf", bbox_inches = 'tight')
+        plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBMVA.png", bbox_inches = 'tight')
+        print("Save the fig in: {}".format(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBMVA.pdf"))
+        print("Save the fig in: {}".format(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBMVA.png"))
+    
+        # ROC curve
+        print(color.GREEN + "Plotting ROC for XGB" + color.END)
+        fig, axes = plt.subplots(1, 1, figsize = (6, 6))
+        roc_XGB = plot_roc_curve(
+            df_final[(df_final["TrainDataset"] == 1)],
+            MVA+"_pred", tpr_threshold = 0, ax = axes, color = '#184d47', linestyle='-', 
+            label = Conf.MVALabels[MVA] + ' Training',
+            cat = cat,Wt = weight
+        )
+        plot_roc_curve(
+            df_final[(df_final["TrainDataset"] == 0)],
+            MVA+"_pred", tpr_threshold = 0, ax = axes, color = '#e2703a', linestyle = '--', 
+            label = Conf.MVALabels[MVA] + ' Testing',
+            cat = cat, Wt = weight
+        )
+        if len(Conf.OverlayWP) > 0:
+            for c,OverlayWpi in zip(Conf.OverlayWPColors,Conf.OverlayWP):
+                plot_single_roc_point(df_final[(df_final["TrainDataset"] == 0)], var = OverlayWpi, ax = axes, color = c, marker = 'o', markersize = 6, label = OverlayWpi+" Test dataset", cat=cat,Wt=weight)
+        axes.set_ylabel("Background rejection", fontsize = 15, loc = 'top')
+        axes.set_xlabel("Signal efficiency", fontsize = 15, loc = 'right')
+        # axes.set_title("")
+        axes.text(1.05, 0.5, 'CMS EGamma ID-Trainer', horizontalalignment = 'center', verticalalignment = 'center', rotation = 'vertical', transform = axes.transAxes, fontsize = 13)
+        axes.text(0, 1, "CMS", horizontalalignment = 'left', verticalalignment = 'bottom', transform=axes.transAxes, fontsize = 15, fontweight = 'bold')
+        axes.text(0.13, 1, "$\it{Simulation}$", horizontalalignment = 'left', verticalalignment = 'bottom', transform = axes.transAxes, fontsize = 13)
+        axes.text(1, 1, "41.7 $fb^{-1} (13TeV,\ 2017)$", horizontalalignment = 'right', verticalalignment = 'bottom', transform = axes.transAxes, fontsize = 13)
+        plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBROC.pdf", bbox_inches = 'tight')
+        plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBROC.png", bbox_inches = 'tight')
+        plt.close('all')
+        print("Save the fig in: {}".format(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBROC.pdf"))
+        print("Save the fig in: {}".format(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBROC.png"))
+        
+        print (color.BLUE + MVA + ' training done!' + color.END)
+
+##----- Feature selection -----##
+# Reference:
+# [1] Selection: https://machinelearningmastery.com/feature-importance-and-feature-selection-with-xgboost-in-python/
+import warnings
+if not sys.warnoptions:
+    warnings.simplefilter("ignore")
+
+print (color.BLUE + 'XGB feature selection starting' + color.END)
+
+# Fit model using each importance as a threshold
+thresholds = sort(cv.best_estimator_.feature_importances_)
+# print(thresholds)
+score_list = []
+for thresh in thresholds:
+    # select features using threshold
+    selection = SelectFromModel(cv.best_estimator_, threshold = thresh, prefit = True)
+    select_X_train = selection.transform(X_train)
+    
+    # train model
+    selection_model = xgb.XGBClassifier(
+        # n_jobs = 12,
+        objective = "binary:logistic", 
+        random_state = Conf.RandomState, 
+        use_label_encoder = False, 
+        scale_pos_weight = scaleposweight,
+        tree_method = 'gpu_hist',
+        # deterministic_histogram = False,
+        **search.best_params_
+    )
+    selection_model.fit(select_X_train, Y_train, sample_weight = Wt_train, verbose = 1)
+
+    # eval model
+    select_X_test = selection.transform(X_test)
+    Y_pred = selection_model.predict(select_X_test)
+    # predictions = [round(value) for value in Y_pred]
+    accuracy = accuracy_score(Y_test, Y_pred, sample_weight = Wt_test)
+    score_list.append(accuracy)
+    print(
+        "Thresh = " + str(round(thresh, 3)) + ", n = " + str(select_X_train.shape[1]) +
+        ", Accuracy = " + str(round(accuracy * 100., 2)) + "%"
+    )
+
+df_featimp = pd.DataFrame({'feature': Conf.features[MVA],'importance':cv.best_estimator_.feature_importances_})
+df_featimp.sort_values('importance', inplace=True, ascending=True)
+df_featimp = df_featimp.reset_index(drop=True)
+
+score_df = pd.DataFrame(
+    list(map(lambda t: [t[0]*100, t[1]], zip(score_list, range(len(score_list), 0, -1)))) , 
+    columns=['accuracy', 'number_of_feature']
+)
+score_df['feature'] = df_featimp['feature']
+score_df['importance'] = df_featimp['importance']
+score_df = score_df.set_index('feature')
+score_df['accu_diff'] = score_df['accuracy'].diff()
+
+plot_FeatureImpSel(score_df, MVA='XGB', OutputDirName=Conf.OutputDirName)
+df2table(score_df, MVA='XGB', OutputDirName=Conf.OutputDirName)
+
+print (color.BLUE + 'XGB feature selection done!' + color.END)
+
+
+# roc_DNN = []
+
 # for MVA in Conf.MVAs:
-#     if 'XGB' in MVA:
-#         ## ----- Prepare data to train the model -----##
+#     if 'DNN' in MVA:
 #         print (color.BLUE + 'Using method: {}'.format(MVA) + color.END)
-#         X_train, Y_train, Wt_train, X_test, Y_test, Wt_test = PrepDataset(df_final, TrainIndices, TestIndices, Conf.features[MVA], cat, weight)
         
-#         ## ----- Start to train the model -----##
-#         print(color.GREEN + MVA + " Training starting" + color.END)
-#         xgb_model = xgb.XGBClassifier(
-#             objective = "binary:logistic", 
-#             random_state = Conf.RandomState, 
-#             use_label_encoder = False, 
-#             scale_pos_weight = scaleposweight, 
-#             tree_method = 'gpu_hist', 
-#             # deterministic_histogram = False
-#         )
-#         print(color.GREEN + "Performing XGB grid search" + color.END)
-
-#         if Conf.Multicore:
-#             NCPUs = 12
-#             print ('Using multicore, with NCPUs =', NCPUs)
-#             cv = GridSearchCV(
-#                 xgb_model, 
-#                 Conf.XGBGridSearch[MVA],
-#                 scoring = 'neg_log_loss',
-#                 cv = 3,
-#                 verbose = 1,
-#                 n_jobs = NCPUs,
-#             )
-#         else:
-#             print ('Using single core')
-#             cv = GridSearchCV(
-#                 xgb_model,
-#                 Conf.XGBGridSearch[MVA],
-#                 scoring = 'neg_log_loss',
-#                 cv = 3,
-#                 verbose = 1
-#             )
+#         X_train, Y_train, Wt_train, X_test, Y_test, Wt_test = PrepDataset(df_final,TrainIndices,TestIndices,Conf.features[MVA],cat,weight)
         
-#         search = cv.fit(X_train, Y_train, sample_weight = Wt_train, verbose = 1)
-
-#         ##----- Save the training model -----##
-#         pickle.dump(cv, open(Conf.OutputDirName + "/" + MVA + "/" + MVA + "_" + "modelXGB.pkl", "wb"))
-#         ROOT.TMVA.Experimental.SaveXGBoost(search.best_estimator_, "myBDT", Conf.OutputDirName+'/'+Conf.xgbmodeloutname, num_inputs = len(Conf.features[MVA]))
+#         print(color.GREEN + MVA + " fitting running" + color.END)
         
-#         ##----- Print the training results -----##
-#         print(color.BOLD + color.GREEN + '-------- Results for XGBClassifier --------' + color.END)
-#         print(color.GREEN + "XGB Best Parameters:" + color.END)
-#         print(color.GREEN + str(search.best_params_) + color.END)
-#         print(color.GREEN + "Expected neg log loss of XGB model = " + str((np.round(np.average(search.best_score_),3))*100) + '%' + color.END)
-#         pred = search.predict(X_test)
-#         print(color.GREEN + "XGB Accuracy: " + str(round(accuracy_score(Y_test, pred, sample_weight = Wt_test) * 100., 2)) + "%" + color.END)
-#         # print(color.GREEN + "XGB ROC AUC: " + str(round(roc_auc_score(Y_test, pred, sample_weight = Wt_test) * 100., 2)) + "%" + color.END)
-#         # precision, recall, thresholds = precision_recall_curve(Y_test, pred, sample_weight = Wt_test)
-#         # area = auc(recall, precision)
+#         es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=10)
+        
+#         modelDNN=Conf.DNNDict[MVA]['model']
+#         modelDNN.compile(loss='binary_crossentropy', 
+#                          optimizer=Adam(learning_rate=Conf.DNNDict[MVA]['learning_rate']), 
+#                          metrics=['accuracy'])
+#         train_history = modelDNN.fit(X_train,Y_train,
+#                                      epochs=Conf.DNNDict[MVA]['epochs'],
+#                                      batch_size=Conf.DNNDict[MVA]['batchsize'],
+#                                      validation_data=(X_test,Y_test, Wt_test),
+#                                      verbose=1,
+#                                      callbacks=[es], sample_weight=Wt_train)
+#         modelDNN.save(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"modelDNN.h5")
+        
+#         df_final.loc[TrainIndices,MVA+"_pred"]=modelDNN.predict(X_train)
+#         df_final.loc[TestIndices,MVA+"_pred"]=modelDNN.predict(X_test)
     
-#         ##----- Plot the training results (MVA && ROC)-----##
-#         df_final.loc[TrainIndices,MVA+"_pred"] = cv.predict_proba(X_train)[:,1]
-#         df_final.loc[TestIndices,MVA+"_pred"] = cv.predict_proba(X_test)[:,1]
+#         print(color.GREEN + "Plotting output response for DNN" + color.END)
         
-#         # MVA distribution
-#         print(color.GREEN + "Plotting output response for XGB" + color.END)
-#         fig, axes = plt.subplots(1, 1, figsize = (6, 6))
-#         df_resolved = df_final[(df_final["TrainDataset"] == 1)]
-#         plot_mva(
-#             df_final[(df_final["TrainDataset"] == 1)],
-#             MVA+"_pred", bins = np.linspace(0, 1, num = 40),
-#             cat = cat,Wt = weight, ax = axes, sample = 'train', ls = 'dashed', alpha = 0.4,
-#             logscale = Conf.MVAlogplot
-#         )
-#         plot_mva(
-#             df_final[(df_final["TrainDataset"] == 0)],
-#             MVA+"_pred", bins = np.linspace(0, 1, num = 40),
-#             cat = cat, Wt = weight, ax = axes, sample = 'test',ls = 'solid', alpha = 0.6,
-#             logscale = Conf.MVAlogplot
-#         )
-#         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBMVA.pdf", bbox_inches = 'tight')
-#         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBMVA.png", bbox_inches = 'tight')
-#         print("Save the fig in: {}".format(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBMVA.pdf"))
-#         print("Save the fig in: {}".format(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBMVA.png"))
+#         fig, axes = plt.subplots(1, 1, figsize=(5, 5))
+#         plot_mva(df_final[(df_final["TrainDataset"] == 1)],MVA+"_pred",bins=[0+i*(1/50) for i in range(51)],cat=cat,Wt=weight,ax=axes,sample='train',ls='dashed', alpha=0.4, logscale=Conf.MVAlogplot)
+#         plot_mva(df_final[(df_final["TrainDataset"] == 0)],MVA+"_pred",bins=[0+i*(1/50) for i in range(51)],cat=cat,Wt=weight,ax=axes,sample='test',ls='solid', alpha=0.8, logscale=Conf.MVAlogplot)
+#         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"DNNMVA.pdf", bbox_inches='tight')
+#         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"DNNMVA.png", bbox_inches='tight')
     
-#         # ROC curve
-#         print(color.GREEN + "Plotting ROC for XGB" + color.END)
-#         fig, axes = plt.subplots(1, 1, figsize = (6, 6))
-#         roc_XGB = plot_roc_curve(
-#             df_final[(df_final["TrainDataset"] == 1)],
-#             MVA+"_pred", tpr_threshold = 0, ax = axes, color = '#184d47', linestyle='-', 
-#             label = Conf.MVALabels[MVA] + ' Training',
-#             cat = cat,Wt = weight
-#         )
-#         plot_roc_curve(
-#             df_final[(df_final["TrainDataset"] == 0)],
-#             MVA+"_pred", tpr_threshold = 0, ax = axes, color = '#e2703a', linestyle = '--', 
-#             label = Conf.MVALabels[MVA] + ' Testing',
-#             cat = cat, Wt = weight
-#         )
-#         if len(Conf.OverlayWP) > 0:
+#         print(color.GREEN + "Plotting ROC for DNN" + color.END)
+        
+#         fig, axes = plt.subplots(1, 1, figsize=(5, 5))
+#         roc_DNN =  plot_roc_curve(df_final[(df_final["TrainDataset"] == 1)],MVA+"_pred", tpr_threshold=0, ax=axes, color='#184d47', linestyle='-', label=Conf.MVALabels[MVA]+' Training',cat=cat,Wt=weight)
+#         plot_roc_curve(df_final[(df_final["TrainDataset"] == 0)],MVA+"_pred", tpr_threshold=0, ax=axes, color='#e2703a', linestyle='--', label=Conf.MVALabels[MVA]+' Testing',cat=cat,Wt=weight)
+#         if len(Conf.OverlayWP)>0:
 #             for c,OverlayWpi in zip(Conf.OverlayWPColors,Conf.OverlayWP):
-#                 plot_single_roc_point(df_final[(df_final["TrainDataset"] == 0)], var = OverlayWpi, ax = axes, color = c, marker = 'o', markersize = 6, label = OverlayWpi+" Test dataset", cat=cat,Wt=weight)
-#         axes.set_ylabel("Background rejection", fontsize = 15, loc = 'top')
-#         axes.set_xlabel("Signal efficiency", fontsize = 15, loc = 'right')
-#         # axes.set_title("")
-#         axes.text(1.05, 0.5, 'CMS EGamma ID-Trainer', horizontalalignment = 'center', verticalalignment = 'center', rotation = 'vertical', transform = axes.transAxes, fontsize = 13)
-#         axes.text(0, 1, "CMS", horizontalalignment = 'left', verticalalignment = 'bottom', transform=axes.transAxes, fontsize = 15, fontweight = 'bold')
-#         axes.text(0.13, 1, "$\it{Simulation}$", horizontalalignment = 'left', verticalalignment = 'bottom', transform = axes.transAxes, fontsize = 13)
-#         axes.text(1, 1, "41.7 $fb^{-1} (13TeV,\ 2017)$", horizontalalignment = 'right', verticalalignment = 'bottom', transform = axes.transAxes, fontsize = 13)
-#         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBROC.pdf", bbox_inches = 'tight')
-#         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBROC.png", bbox_inches = 'tight')
+#                 plot_single_roc_point(df_final[(df_final["TrainDataset"] == 0)], var=OverlayWpi, ax=axes, color=c, marker='o', markersize=6, label=OverlayWpi+" Test dataset", cat=cat,Wt=weight)
+#         axes.set_ylabel("Background rejection")
+#         axes.set_xlabel("Signal efficiency")
+#         axes.set_title("DNN")
+#         axes.text(1.05, 0.5, 'CMS EGamma ID-Trainer',
+#             horizontalalignment='center',
+#             verticalalignment='center',
+#             rotation='vertical',
+#             transform=axes.transAxes)
+#         axes.tick_params(direction='in', which='both', bottom=True, top=True, left=True, right=True)
+#         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"DNNROC.pdf", bbox_inches='tight')
+#         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"DNNROC.png", bbox_inches='tight')
 #         plt.close('all')
-#         print("Save the fig in: {}".format(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBROC.pdf"))
-#         print("Save the fig in: {}".format(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"XGBROC.png"))
         
-#         print (color.BLUE + MVA + ' training done!' + color.END)
+#         print (color.BLUE + MVA + 'training done!' + color.END)
 
-# ##----- Feature selection -----##
-# # Reference:
-# # [1] Selection: https://machinelearningmastery.com/feature-importance-and-feature-selection-with-xgboost-in-python/
-# import warnings
-# if not sys.warnoptions:
-#     warnings.simplefilter("ignore")
 
-# print (color.BLUE + 'XGB feature selection starting' + color.END)
 
-# # Fit model using each importance as a threshold
-# thresholds = sort(cv.best_estimator_.feature_importances_)
-# # print(thresholds)
-# score_list = []
-# for thresh in thresholds:
-#     # select features using threshold
-#     selection = SelectFromModel(cv.best_estimator_, threshold = thresh, prefit = True)
-#     select_X_train = selection.transform(X_train)
+##PlotFinalROC
+# print(color.GREEN+"Plotting Final ROC"+color.END)
+# print("Plotting Final ROC")
+
+# fig, axes = plt.subplots(1, 1, figsize=(4.5, 4.5))
+# if len(Conf.OverlayWP)>0:
+#     for c,OverlayWpi in zip(Conf.OverlayWPColors,Conf.OverlayWP):
+#         plot_single_roc_point(df_final[(df_final["TrainDataset"] == 0)], var=OverlayWpi, ax=axes, color=c, marker='o', markersize=8, label=OverlayWpi+" Test dataset", cat=cat,Wt=weight)
+# if len(Conf.MVAs)>0:
+#     for c,MVAi in zip(Conf.MVAColors,Conf.MVAs):
+#         plot_roc_curve(df_final[(df_final["TrainDataset"] == 1)],MVAi+"_pred", tpr_threshold=0.7, ax=axes, color=c, linestyle='-', label=Conf.MVALabels[MVAi]+' Training',cat=cat,Wt=weight)
+#         plot_roc_curve(df_final[(df_final["TrainDataset"] == 0)],MVAi+"_pred", tpr_threshold=0.7, ax=axes, color=c, linestyle='--', label=Conf.MVALabels[MVAi]+' Testing',cat=cat,Wt=weight)
+        
+#     axes.set_ylabel("Background rejection")
+#     axes.set_xlabel("Signal efficiency")
+#     # axes.set_title("Final")
+#     axes.text(1.05, 0.5, 'CMS EGamma ID-Trainer',
+#         horizontalalignment='center',
+#         verticalalignment='center',
+#         rotation='vertical',
+#         transform=axes.transAxes)
+# plt.savefig(Conf.OutputDirName+"/ROCFinal.pdf", bbox_inches='tight')
+# plt.savefig(Conf.OutputDirName+"/ROCFinal.png", bbox_inches='tight')
+
+##----- Save the threashold to txt file -----##
+import math 
+def ROCinfo(list_roc, clfname='XGBoost bdt'):
+    df_roc = pd.DataFrame(list(zip(list_roc[1], list_roc[2], list_roc[3])),
+                          columns =['sig_eff', 'bag_rej', 'threshold'])
+    df_roc['disto1'] = df_roc.apply(lambda row: math.sqrt((1 - row.sig_eff) + (1 - row.bag_rej)), axis = 1) 
+
+    idx_closetto1 = df_roc[['disto1']].idxmin()[0]
+    idx_90wp = df_roc.iloc[(df_roc['sig_eff']-0.9).abs().argsort()[:1]].index.tolist()[0]
+    idx_80wp = df_roc.iloc[(df_roc['sig_eff']-0.8).abs().argsort()[:1]].index.tolist()[0]
     
-#     # train model
-#     selection_model = xgb.XGBClassifier(
-#         # n_jobs = 12,
-#         objective = "binary:logistic", 
-#         random_state = Conf.RandomState, 
-#         use_label_encoder = False, 
-#         scale_pos_weight = scaleposweight,
-#         tree_method = 'gpu_hist',
-#         # deterministic_histogram = False,
-#         **search.best_params_
-#     )
-#     selection_model.fit(select_X_train, Y_train, sample_weight = Wt_train, verbose = 1)
-
-#     # eval model
-#     select_X_test = selection.transform(X_test)
-#     Y_pred = selection_model.predict(select_X_test)
-#     # predictions = [round(value) for value in Y_pred]
-#     accuracy = accuracy_score(Y_test, Y_pred, sample_weight = Wt_test)
-#     score_list.append(accuracy)
-#     print(
-#         "Thresh = " + str(round(thresh, 3)) + ", n = " + str(select_X_train.shape[1]) +
-#         ", Accuracy = " + str(round(accuracy * 100., 2)) + "%"
-#     )
-
-# df_featimp = pd.DataFrame({'feature': Conf.features[MVA],'importance':cv.best_estimator_.feature_importances_})
-# df_featimp.sort_values('importance', inplace=True, ascending=True)
-# df_featimp = df_featimp.reset_index(drop=True)
-
-# score_df = pd.DataFrame(
-#     list(map(lambda t: [t[0]*100, t[1]], zip(score_list, range(len(score_list), 0, -1)))) , 
-#     columns=['accuracy', 'number_of_feature']
-# )
-# score_df['feature'] = df_featimp['feature']
-# score_df['importance'] = df_featimp['importance']
-# score_df = score_df.set_index('feature')
-# score_df['accu_diff'] = score_df['accuracy'].diff()
-
-# plot_FeatureImpSel(score_df, MVA='XGB', OutputDirName=Conf.OutputDirName)
-# df2table(score_df, MVA='XGB', OutputDirName=Conf.OutputDirName)
-
-# print (color.BLUE + 'XGB feature selection done!' + color.END)
-
-
-# # roc_DNN = []
-
-# # for MVA in Conf.MVAs:
-# #     if 'DNN' in MVA:
-# #         print (color.BLUE + 'Using method: {}'.format(MVA) + color.END)
-        
-# #         X_train, Y_train, Wt_train, X_test, Y_test, Wt_test = PrepDataset(df_final,TrainIndices,TestIndices,Conf.features[MVA],cat,weight)
-        
-# #         print(color.GREEN + MVA + " fitting running" + color.END)
-        
-# #         es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=10)
-        
-# #         modelDNN=Conf.DNNDict[MVA]['model']
-# #         modelDNN.compile(loss='binary_crossentropy', 
-# #                          optimizer=Adam(learning_rate=Conf.DNNDict[MVA]['learning_rate']), 
-# #                          metrics=['accuracy'])
-# #         train_history = modelDNN.fit(X_train,Y_train,
-# #                                      epochs=Conf.DNNDict[MVA]['epochs'],
-# #                                      batch_size=Conf.DNNDict[MVA]['batchsize'],
-# #                                      validation_data=(X_test,Y_test, Wt_test),
-# #                                      verbose=1,
-# #                                      callbacks=[es], sample_weight=Wt_train)
-# #         modelDNN.save(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"modelDNN.h5")
-        
-# #         df_final.loc[TrainIndices,MVA+"_pred"]=modelDNN.predict(X_train)
-# #         df_final.loc[TestIndices,MVA+"_pred"]=modelDNN.predict(X_test)
+    print("Save the WP file in: {}".format(Conf.OutputDirName+'/{}_WP.txt'.format(clfname)))
+    with open(Conf.OutputDirName+'/{}_WP.txt'.format(clfname), "w") as text_file:
+        print ('{} score threshold that results in the closet point to (1, 1), corresponding to {:.3g}% of signal efficiency and {:.3g} of background rejection, is {:.3g}'.format(clfname, df_roc.at[idx_closetto1,'sig_eff']*100.,df_roc.at[idx_closetto1,'bag_rej']*100., df_roc.at[idx_closetto1,'threshold']), file = text_file)
+        print ('{} score for 90% working point (signal efficiency), {:.3g} of background rejection, is {:.3g}'.format(clfname, df_roc.at[idx_90wp,'bag_rej']*100., df_roc.at[idx_90wp,'threshold']), file = text_file)
+        print ('{} score for 80% working point (signal efficiency), {:.3g} of background rejection, is {:.3g}'.format(clfname, df_roc.at[idx_80wp,'bag_rej']*100., df_roc.at[idx_80wp,'threshold']), file = text_file)
     
-# #         print(color.GREEN + "Plotting output response for DNN" + color.END)
-        
-# #         fig, axes = plt.subplots(1, 1, figsize=(5, 5))
-# #         plot_mva(df_final[(df_final["TrainDataset"] == 1)],MVA+"_pred",bins=[0+i*(1/50) for i in range(51)],cat=cat,Wt=weight,ax=axes,sample='train',ls='dashed', alpha=0.4, logscale=Conf.MVAlogplot)
-# #         plot_mva(df_final[(df_final["TrainDataset"] == 0)],MVA+"_pred",bins=[0+i*(1/50) for i in range(51)],cat=cat,Wt=weight,ax=axes,sample='test',ls='solid', alpha=0.8, logscale=Conf.MVAlogplot)
-# #         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"DNNMVA.pdf", bbox_inches='tight')
-# #         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"DNNMVA.png", bbox_inches='tight')
-    
-# #         print(color.GREEN + "Plotting ROC for DNN" + color.END)
-        
-# #         fig, axes = plt.subplots(1, 1, figsize=(5, 5))
-# #         roc_DNN =  plot_roc_curve(df_final[(df_final["TrainDataset"] == 1)],MVA+"_pred", tpr_threshold=0, ax=axes, color='#184d47', linestyle='-', label=Conf.MVALabels[MVA]+' Training',cat=cat,Wt=weight)
-# #         plot_roc_curve(df_final[(df_final["TrainDataset"] == 0)],MVA+"_pred", tpr_threshold=0, ax=axes, color='#e2703a', linestyle='--', label=Conf.MVALabels[MVA]+' Testing',cat=cat,Wt=weight)
-# #         if len(Conf.OverlayWP)>0:
-# #             for c,OverlayWpi in zip(Conf.OverlayWPColors,Conf.OverlayWP):
-# #                 plot_single_roc_point(df_final[(df_final["TrainDataset"] == 0)], var=OverlayWpi, ax=axes, color=c, marker='o', markersize=6, label=OverlayWpi+" Test dataset", cat=cat,Wt=weight)
-# #         axes.set_ylabel("Background rejection")
-# #         axes.set_xlabel("Signal efficiency")
-# #         axes.set_title("DNN")
-# #         axes.text(1.05, 0.5, 'CMS EGamma ID-Trainer',
-# #             horizontalalignment='center',
-# #             verticalalignment='center',
-# #             rotation='vertical',
-# #             transform=axes.transAxes)
-# #         axes.tick_params(direction='in', which='both', bottom=True, top=True, left=True, right=True)
-# #         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"DNNROC.pdf", bbox_inches='tight')
-# #         plt.savefig(Conf.OutputDirName+"/"+MVA+"/"+MVA+"_"+"DNNROC.png", bbox_inches='tight')
-# #         plt.close('all')
-        
-# #         print (color.BLUE + MVA + 'training done!' + color.END)
+    return df_roc.at[idx_closetto1,'threshold']
 
+xgb_threshold = ROCinfo(roc_XGB, clfname = 'XGBoost_bdt')
+# ROCinfo(roc_DNN, clfname='Tensorflow_DNN')
 
+##----- efficiency vs pT, nVtx -----##
+print (color.BLUE + 'Efficiency caculation starting!' + color.END)
+bin_pt = [19., 26., 31., 35., 40., 45., 50, 55., 60., 65., 70., 75., 80., 87., 97., 117., 140.]
+# bin = np.linspace(0, 140, num = 70)
+plot_eff(
+    df_final, "elePt", xaxixs = "P^{e}_{T} [GeV]", bin = bin_pt, 
+    TrainModel = Conf.OutputDirName + "/" + MVA + "/" + MVA + "_" + "modelXGB.pkl",
+    features = Conf.features['XGB'],
+    importConfig = importConfig, score_cut = xgb_threshold, wei = "instwei", 
+    outdir = "{}/eff".format(Conf.OutputDirName)
+)
 
-# ##PlotFinalROC
-# # print(color.GREEN+"Plotting Final ROC"+color.END)
-# # print("Plotting Final ROC")
+bin_nVtx = [2., 10., 15., 20, 25, 30, 35, 40, 45, 55, 70, 90]
+# bin = np.linspace(0, 100, num = 50)
+plot_eff(
+    df_final, "nVtx", xaxixs = "# of vertices", bin = bin_nVtx, 
+    TrainModel = Conf.OutputDirName + "/" + MVA + "/" + MVA + "_" + "modelXGB.pkl",
+    features = Conf.features['XGB'],
+    importConfig = importConfig, score_cut = xgb_threshold, wei = "instwei", 
+    outdir = "{}/eff".format(Conf.OutputDirName)
+)
 
-# # fig, axes = plt.subplots(1, 1, figsize=(4.5, 4.5))
-# # if len(Conf.OverlayWP)>0:
-# #     for c,OverlayWpi in zip(Conf.OverlayWPColors,Conf.OverlayWP):
-# #         plot_single_roc_point(df_final[(df_final["TrainDataset"] == 0)], var=OverlayWpi, ax=axes, color=c, marker='o', markersize=8, label=OverlayWpi+" Test dataset", cat=cat,Wt=weight)
-# # if len(Conf.MVAs)>0:
-# #     for c,MVAi in zip(Conf.MVAColors,Conf.MVAs):
-# #         plot_roc_curve(df_final[(df_final["TrainDataset"] == 1)],MVAi+"_pred", tpr_threshold=0.7, ax=axes, color=c, linestyle='-', label=Conf.MVALabels[MVAi]+' Training',cat=cat,Wt=weight)
-# #         plot_roc_curve(df_final[(df_final["TrainDataset"] == 0)],MVAi+"_pred", tpr_threshold=0.7, ax=axes, color=c, linestyle='--', label=Conf.MVALabels[MVAi]+' Testing',cat=cat,Wt=weight)
-        
-# #     axes.set_ylabel("Background rejection")
-# #     axes.set_xlabel("Signal efficiency")
-# #     # axes.set_title("Final")
-# #     axes.text(1.05, 0.5, 'CMS EGamma ID-Trainer',
-# #         horizontalalignment='center',
-# #         verticalalignment='center',
-# #         rotation='vertical',
-# #         transform=axes.transAxes)
-# # plt.savefig(Conf.OutputDirName+"/ROCFinal.pdf", bbox_inches='tight')
-# # plt.savefig(Conf.OutputDirName+"/ROCFinal.png", bbox_inches='tight')
-
-# ##----- Save the threashold to txt file -----##
-# import math 
-# def ROCinfo(list_roc, clfname='XGBoost bdt'):
-#     df_roc = pd.DataFrame(list(zip(list_roc[1], list_roc[2], list_roc[3])),
-#                           columns =['sig_eff', 'bag_rej', 'threshold'])
-#     df_roc['disto1'] = df_roc.apply(lambda row: math.sqrt((1 - row.sig_eff) + (1 - row.bag_rej)), axis = 1) 
-
-#     idx_closetto1 = df_roc[['disto1']].idxmin()[0]
-#     idx_90wp = df_roc.iloc[(df_roc['sig_eff']-0.9).abs().argsort()[:1]].index.tolist()[0]
-#     idx_80wp = df_roc.iloc[(df_roc['sig_eff']-0.8).abs().argsort()[:1]].index.tolist()[0]
-    
-#     print("Save the WP file in: {}".format(Conf.OutputDirName+'/{}_WP.txt'.format(clfname)))
-#     with open(Conf.OutputDirName+'/{}_WP.txt'.format(clfname), "w") as text_file:
-#         print ('{} score threshold that results in the closet point to (1, 1), corresponding to {:.3g}% of signal efficiency and {:.3g} of background rejection, is {:.3g}'.format(clfname, df_roc.at[idx_closetto1,'sig_eff']*100.,df_roc.at[idx_closetto1,'bag_rej']*100., df_roc.at[idx_closetto1,'threshold']), file = text_file)
-#         print ('{} score for 90% working point (signal efficiency), {:.3g} of background rejection, is {:.3g}'.format(clfname, df_roc.at[idx_90wp,'bag_rej']*100., df_roc.at[idx_90wp,'threshold']), file = text_file)
-#         print ('{} score for 80% working point (signal efficiency), {:.3g} of background rejection, is {:.3g}'.format(clfname, df_roc.at[idx_80wp,'bag_rej']*100., df_roc.at[idx_80wp,'threshold']), file = text_file)
-    
-#     return df_roc.at[idx_closetto1,'threshold']
-
-# xgb_threshold = ROCinfo(roc_XGB, clfname = 'XGBoost_bdt')
-# # ROCinfo(roc_DNN, clfname='Tensorflow_DNN')
-
-# ##----- efficiency vs pT, nVtx -----##
-# print (color.BLUE + 'Efficiency caculation starting!' + color.END)
-# bin_pt = [19., 26., 31., 35., 40., 45., 50, 55., 60., 65., 70., 75., 80., 87., 97., 117., 140.]
-# # bin = np.linspace(0, 140, num = 70)
-# plot_eff(
-#     df_final, "elePt", xaxixs = "P^{e}_{T} [GeV]", bin = bin_pt, 
-#     TrainModel = Conf.OutputDirName + "/" + MVA + "/" + MVA + "_" + "modelXGB.pkl",
-#     features = Conf.features['XGB'],
-#     importConfig = importConfig, score_cut = xgb_threshold, wei = "instwei", 
-#     outdir = "{}/eff".format(Conf.OutputDirName)
-# )
-
-# bin_nVtx = [2., 10., 15., 20, 25, 30, 35, 40, 45, 55, 70, 90]
-# # bin = np.linspace(0, 100, num = 50)
-# plot_eff(
-#     df_final, "nVtx", xaxixs = "# of vertices", bin = bin_nVtx, 
-#     TrainModel = Conf.OutputDirName + "/" + MVA + "/" + MVA + "_" + "modelXGB.pkl",
-#     features = Conf.features['XGB'],
-#     importConfig = importConfig, score_cut = xgb_threshold, wei = "instwei", 
-#     outdir = "{}/eff".format(Conf.OutputDirName)
-# )
-
-# print (color.BLUE + 'All done!' + color.END)
+print (color.BLUE + 'All done!' + color.END)
 
 
 
